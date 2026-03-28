@@ -1,0 +1,9 @@
+{
+  "block_size": 8,
+  "max_blocks": 3,
+  "adaptive_early_stop": true,
+  "parallel_execution": false,
+  "enable_recursive_decomposition": false,
+  "max_recursion_depth": 3,
+  "attn_score_model": "same"
+}

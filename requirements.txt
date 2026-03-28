@@ -1,0 +1,6 @@
+# 注意力残差多智能体框架 - 依赖
+# 大部分依赖都是OpenClaw已经提供的，这里只列额外需要的
+
+dataclasses; python_version < "3.7"
+jinja2
+numpy
