@@ -15,15 +15,16 @@ from .attn_types import SubTask, SubTaskResult, BlockResult
 
 
 class SubAgentExecutor:
-    """子任务执行器，支持顺序和并行执行"""
+    """子任务执行器，支持顺序和并行执行，内置容错重试机制"""
     
-    def __init__(self, max_parallel: int = 4):
+    def __init__(self, max_parallel: int = 4, max_retries: int = 1):
         self.max_parallel = max_parallel
+        self.max_retries = max_retries  # 失败后最大重试次数
     
     def execute_subtask(self, subtask: SubTask, 
                        query: str, 
                        previous_results: str = "") -> SubTaskResult:
-        """执行单个子任务"""
+        """执行单个子任务，带容错重试"""
         
         # 构建prompt
         if previous_results:
@@ -46,17 +47,38 @@ class SubAgentExecutor:
         
         # call_llm 由外部注入
         global call_llm
-        result = call_llm(prompt, temperature=0.7)
         
-        # 这里简化处理，token_usage估算
-        estimated_tokens = len(result) // 4
+        # 重试循环
+        last_exception = None
+        for retry in range(self.max_retries + 1):
+            try:
+                # 重试时温度稍高一点，增加跳出概率
+                temperature = 0.7 if retry == 0 else 0.9
+                result = call_llm(prompt, temperature=temperature)
+                
+                if result and len(result.strip()) > 0:
+                    # 执行成功
+                    estimated_tokens = len(result) // 4
+                    return SubTaskResult(
+                        task_id=subtask.task_id,
+                        task=subtask,
+                        result=result.strip(),
+                        success=True,
+                        token_usage=estimated_tokens
+                    )
+            except Exception as e:
+                last_exception = e
+                # 继续重试
+                continue
         
+        # 所有重试都失败了
+        error_msg = str(last_exception) if last_exception else "空结果"
         return SubTaskResult(
             task_id=subtask.task_id,
             task=subtask,
-            result=result.strip(),
-            success=True,
-            token_usage=estimated_tokens
+            result=f"子任务执行失败: {error_msg}",
+            success=False,
+            token_usage=0
         )
     
     def execute_block(self, block: List[SubTask], 
@@ -137,13 +159,19 @@ class SubAgentExecutor:
                         results.append(result)
                     except Exception as e:
                         # 执行失败，标记为失败但继续
-                        task = parallel_tasks[len(results)]
-                        results.append(SubTaskResult(
-                            task_id=task.task_id,
-                            task=task,
-                            result=f"执行失败: {str(e)}",
-                            success=False
-                        ))
+                        # 找到对应的task（这里顺序可能不对，但不影响，因为最后按task_id排序）
+                        task = None
+                        for t in parallel_tasks:
+                            if not any(r.task_id == t.task_id for r in results):
+                                task = t
+                                break
+                        if task:
+                            results.append(SubTaskResult(
+                                task_id=task.task_id,
+                                task=task,
+                                result=f"执行失败: {str(e)}",
+                                success=False
+                            ))
         
         # 顺序执行不可并行任务
         for task in serial_tasks:

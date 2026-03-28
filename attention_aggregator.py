@@ -76,16 +76,27 @@ class AttentionAggregator:
         if not previous_aggregated:
             previous_aggregated = "(无)"
         
+        # 过滤掉失败的结果，只给成功的打分
+        successful_results = [r for r in block_result.results if r.success]
+        failed_count = len(block_result.results) - len(successful_results)
+        
         # 构建prompt
         from jinja2 import Template
         template = Template(AGGREGATE_PROMPT)
         prompt = template.render(
             query=query,
             previous_aggregated=previous_aggregated,
-            count=len(block_result.results),
-            results=block_result.results,
+            count=len(successful_results),
+            results=successful_results,
             idx=lambda x: x+1
         )
+        
+        # 如果有失败的，在prompt末尾说明
+        if failed_count > 0:
+            prompt += f"""
+
+注意：有 {failed_count} 个子任务执行失败，这些结果缺失，请在聚合结果中说明哪些部分信息缺失。
+"""
         
         # call_llm 由外部注入
         global call_llm
