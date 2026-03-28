@@ -146,6 +146,69 @@ print(f"消耗 {result.total_tokens} tokens")
 - **多视角评审** - 多个子Agent从不同角度分析，需要聚合
 - **增量式问题解决** - 分阶段处理，每阶段需要保留之前结论
 
+## 👨‍💻 对于 Agent 开发者：如何在你的 Agent 中使用
+
+### 什么时候应该用 AM？
+
+| 问题规模 | 是否用 AM | 原因 |
+|----------|----------|------|
+| 简单问题（1-3个子问题） | ❌ 不用 | 直接回答更快 |
+| 中等问题（4-8个子问题） | ✅ 推荐用 | 控制token，避免稀释 |
+| 复杂问题（8+个子问题） | ✅ **必须用** | 传统方式一定会token爆炸 |
+
+### 使用决策树
+
+```
+你接到一个用户问题
+    │
+    ▼
+问题能不能一句话回答？ → 是 → 直接回答
+    │
+    ▼
+能分解成几个独立子问题？ → 不能 → 直接回答
+    │
+    ▼
+子问题数量 > 3 → ✅ 使用 attnres-multiagent！
+```
+
+### 代码示例（复制就能用）
+
+```python
+# 作为 Agent 开发者，你只需要：
+from attnres_multiagent import AttnResMultiAgent
+
+def process_complex_query(user_query: str) -> str:
+    # 初始化（启用所有优化）
+    agent = AttnResMultiAgent(
+        block_size=8,
+        max_blocks=3,
+        adaptive_early_stop=True,      # 推荐开启
+        parallel_execution=True,       # 推荐开启，加速
+        enable_recursive_decomposition=True,  # 推荐开启，自动分解复杂子任务
+        max_recursion_depth=3
+    )
+    
+    # 直接运行，AM 帮你处理一切：
+    # 1. 自动分解任务
+    # 2. 递归分解（如果启用）
+    # 3. 分组分块
+    # 4. 执行子任务
+    # 5. 注意力聚合压缩token
+    # 6. 提前停止（如果收敛）
+    # 7. 最终整合输出
+    result = agent.run(user_query)
+    
+    # 返回最终结果给用户
+    return result.final_answer
+```
+
+### 最佳实践建议
+
+1. **默认开启所有优化**：`adaptive_early_stop=True`, `parallel_execution=True`, `enable_recursive_decomposition=True`
+2. **block_size 保持 8**：这是经验最优值，不要太大（token爆炸）不要太小（增加Block数）
+3. **max_blocks 保持 3**：3 个Block足够绝大多数场景，token 可控
+4. **max_recursion_depth 保持 3**：3层足够分解到可执行粒度
+
 ## 📄 许可证
 
 MIT
