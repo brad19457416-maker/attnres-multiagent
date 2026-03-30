@@ -6,7 +6,7 @@ import json
 from typing import List
 from dataclasses import dataclass
 
-from .attn_types import SubTask, DecompositionResult
+from attn_types import SubTask, DecompositionResult
 
 
 DECOMPOSE_PROMPT = """你是一个专业的任务分解专家。请将用户的复杂查询分解为多个子任务。

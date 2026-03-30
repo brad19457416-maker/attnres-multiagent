@@ -1,0 +1,8 @@
+LICENSE
+README.md
+pyproject.toml
+attnres_multiagent.egg-info/PKG-INFO
+attnres_multiagent.egg-info/SOURCES.txt
+attnres_multiagent.egg-info/dependency_links.txt
+attnres_multiagent.egg-info/requires.txt
+attnres_multiagent.egg-info/top_level.txt

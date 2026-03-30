@@ -18,7 +18,7 @@
 from typing import List, Dict, Callable, Optional
 from dataclasses import dataclass
 
-from .attn_types import (
+from attn_types import (
     SubTaskResult, 
     BlockResult, 
     BlockAggregatedResult,

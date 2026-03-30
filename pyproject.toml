@@ -1,0 +1,25 @@
+[project]
+name = "attnres-multiagent"
+version = "1.0.0"
+authors = [
+  { name="OpenClaw Contributors" }
+]
+description = "Hierarchical Gated Attention Residual MultiAgent - 注意力残差多智能体框架，解决上下文爆炸和信息稀释问题"
+readme = "README.md"
+license = { file="LICENSE" }
+requires-python = ">=3.8"
+keywords = [
+  "multi-agent",
+  "attention-residual",
+  "hgarn",
+  "llm",
+  "ai"
+]
+dependencies = [
+  "jinja2",
+  "numpy"
+]
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"

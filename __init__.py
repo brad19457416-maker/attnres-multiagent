@@ -19,9 +19,9 @@ Author: OpenClaw
 License: MIT
 """
 
-from .attnres_multiagent import AttnResMultiAgent, RunResult
-from .hierarchical_attn_res import HGARMultiAgent
-from .attn_types import (
+from attnres_multiagent import AttnResMultiAgent, RunResult
+from hierarchical_attn_res import HGARMultiAgent
+from attn_types import (
     SubTask,
     SubTaskResult,
     BlockResult,
@@ -29,8 +29,8 @@ from .attn_types import (
     DecompositionResult,
     HierarchicalLevel
 )
-from .gated_residual_aggregator import GatedResidualAggregator
-from .vector_selector import compute_similarity, select_top_k, ScoredResult
+from gated_residual_aggregator import GatedResidualAggregator
+from vector_selector import compute_similarity, select_top_k, ScoredResult
 
 __all__ = [
     # v0 原始架构 (兼容)

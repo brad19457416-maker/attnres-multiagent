@@ -43,7 +43,7 @@
 
 from typing import List, Optional, Callable
 
-from .attn_types import (
+from attn_types import (
     SubTask, 
     DecompositionResult,
     SubTaskResult, 
@@ -52,9 +52,9 @@ from .attn_types import (
     HierarchicalLevel,
     RunResult
 )
-from .task_decomposer import TaskDecomposer
-from .subagent_executor import SubAgentExecutor
-from .gated_residual_aggregator import GatedResidualAggregator
+from task_decomposer import TaskDecomposer
+from subagent_executor import SubAgentExecutor
+from gated_residual_aggregator import GatedResidualAggregator
 
 
 class HGARMultiAgent:

@@ -7,7 +7,7 @@ from dataclasses import dataclass
 
 import concurrent.futures
 
-from .attn_types import SubTask, SubTaskResult, BlockResult
+from attn_types import SubTask, SubTaskResult, BlockResult
 
 
 class SubAgentExecutor:

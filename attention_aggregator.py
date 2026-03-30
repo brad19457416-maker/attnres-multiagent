@@ -4,7 +4,7 @@
 
 from typing import List, Dict, Callable
 
-from .attn_types import SubTaskResult, BlockResult, BlockAggregatedResult
+from attn_types import SubTaskResult, BlockResult, BlockAggregatedResult
 
 
 AGGREGATE_PROMPT = """# 注意力残差聚合

@@ -12,16 +12,16 @@ Date: 2026-03-28
 
 from typing import List, Optional, Callable
 
-from .attn_types import (
+from attn_types import (
     SubTask, 
     SubTaskResult, 
     BlockResult, 
     BlockAggregatedResult,
     RunResult
 )
-from .task_decomposer import TaskDecomposer
-from .subagent_executor import SubAgentExecutor
-from .attention_aggregator import AttentionAggregator
+from task_decomposer import TaskDecomposer
+from subagent_executor import SubAgentExecutor
+from attention_aggregator import AttentionAggregator
 
 
 class AttnResMultiAgent:
