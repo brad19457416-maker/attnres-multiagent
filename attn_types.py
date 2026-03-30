@@ -59,6 +59,28 @@ class BlockAggregatedResult:
 
 
 @dataclass
+class BlockAggregatedResult:
+    """Block聚合结果（聚合后）"""
+    block_id: int
+    aggregated_result: str
+    attention_scores: Dict[str, float]  # task_id -> score
+    total_token_usage: int
+    original_count: int  # 原始子任务数量
+    compressed: bool = True  # 是否压缩了
+    gate_value: float = 1.0  # 门控值，用于层次残差连接
+    residual_connection: bool = True  # 是否启用残差连接
+
+
+@dataclass
+class HierarchicalLevel:
+    """层次化结构中的一层"""
+    level_id: int
+    blocks: List[BlockAggregatedResult]
+    aggregated: str
+    gate_score: float  # 该层整体门控分数
+
+
+@dataclass
 class RunResult:
     """完整运行结果"""
     query: str
@@ -67,6 +89,7 @@ class RunResult:
     subtasks_total: int
     total_tokens: int
     blocks: List[BlockAggregatedResult] = field(default_factory=list)
+    hierarchical_levels: List[HierarchicalLevel] = field(default_factory=list)
     success: bool = True
     early_stopped: bool = False
     metadata: Dict[str, Any] = field(default_factory=dict)
