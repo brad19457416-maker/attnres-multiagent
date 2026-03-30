@@ -2,14 +2,10 @@
 子任务执行器 - 执行子Agent任务
 """
 
-from typing import List
+from typing import List, Callable, Optional
 from dataclasses import dataclass
 
-from .attn_types import SubTask, SubTaskResult, BlockResult
-
-
 import concurrent.futures
-from typing import List, Tuple
 
 from .attn_types import SubTask, SubTaskResult, BlockResult
 
@@ -17,9 +13,10 @@ from .attn_types import SubTask, SubTaskResult, BlockResult
 class SubAgentExecutor:
     """子任务执行器，支持顺序和并行执行，内置容错重试机制"""
     
-    def __init__(self, max_parallel: int = 4, max_retries: int = 1):
+    def __init__(self, max_parallel: int = 4, max_retries: int = 1, llm_client: Callable = None):
         self.max_parallel = max_parallel
         self.max_retries = max_retries  # 失败后最大重试次数
+        self._call_llm = llm_client if llm_client else None
     
     def execute_subtask(self, subtask: SubTask, 
                        query: str, 
@@ -45,16 +42,17 @@ class SubAgentExecutor:
 
 给出你的回答:"""
         
-        # call_llm 由外部注入
-        global call_llm
-        
         # 重试循环
         last_exception = None
         for retry in range(self.max_retries + 1):
             try:
                 # 重试时温度稍高一点，增加跳出概率
                 temperature = 0.7 if retry == 0 else 0.9
-                result = call_llm(prompt, temperature=temperature)
+                if self._call_llm:
+                    result = self._call_llm(prompt, temperature=temperature)
+                else:
+                    global call_llm
+                    result = call_llm(prompt, temperature=temperature)
                 
                 if result and len(result.strip()) > 0:
                     # 执行成功

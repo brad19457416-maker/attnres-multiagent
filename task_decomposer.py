@@ -72,22 +72,22 @@ class TaskDecomposer:
     def __init__(self, llm_client=None, max_recursion_depth: int = 3):
         self.llm_client = llm_client
         self.max_recursion_depth = max_recursion_depth
+        # 如果提供了llm_client，使用它；否则依赖全局call_llm（OpenClaw环境）
+        self._call_llm = llm_client if llm_client else None
     
     def decompose(self, query: str) -> List[SubTask]:
         """顶层分解：将原始查询分解为子任务"""
-        """将查询分解为子任务"""
         prompt = DECOMPOSE_PROMPT.replace("{{query}}", query)
         
-        # 这里使用当前模型完成分解
-        # 在OpenClaw环境中，我们可以直接调用model completion
-        # call_llm 由外部注入
-        
-        global call_llm
-        response = call_llm(prompt, temperature=0.3)
+        # 使用llm_client或全局call_llm
+        if self._call_llm:
+            response = self._call_llm(prompt, temperature=0.3)
+        else:
+            global call_llm
+            response = call_llm(prompt, temperature=0.3)
         
         try:
             # 解析JSON
-            import json
             data = json.loads(response.strip())
             subtasks_data = data.get("subtasks", [])
             
@@ -149,8 +149,6 @@ class TaskDecomposer:
         Returns:
             DecompositionResult: 如果需要分解，返回分解后的子任务列表
         """
-        from .types import DecompositionResult
-        
         # 超过最大深度，不分解
         if task.depth >= self.max_recursion_depth:
             return DecompositionResult(
@@ -164,11 +162,13 @@ class TaskDecomposer:
             .replace("{{task_description}}", task.description)\
             .replace("{{depth}}", str(task.depth))
         
-        global call_llm
-        response = call_llm(prompt, temperature=0.3)
+        if self._call_llm:
+            response = self._call_llm(prompt, temperature=0.3)
+        else:
+            global call_llm
+            response = call_llm(prompt, temperature=0.3)
         
         try:
-            import json
             data = json.loads(response.strip())
             need_decompose = data.get("need_decompose", False)
             
@@ -208,21 +208,25 @@ class TaskDecomposer:
                 subtasks=[]
             )
     
-    def flatten_recursive_tasks(self, subtasks: List[SubTask]) -> List[SubTask]:
+    def flatten_recursive_tasks(self, subtasks: List[SubTask], original_query: str) -> List[SubTask]:
         """递归展开所有子任务，返回扁平化列表
         
         如果子任务被进一步分解，会递归分解直到不需要分解。
         """
-        from .types import DecompositionResult
-        
         result = []
         stack = list(subtasks)  # 用栈实现DFS
         
         while stack:
             task = stack.pop()
-            # 检查是否需要分解（这里original_query需要保持顶层？不对，应该保持）
-            # 实际上original_query一直是顶层用户查询，用于判断相关性
-            # 这里我们需要一个闭包保存original_query，但我们只保留逻辑，调用方处理
-            result.append(task)
+            # 检查是否需要分解，original_query一直是顶层用户查询
+            decomp_result = self.check_need_decompose(task, original_query)
+            
+            if decomp_result.decomposed and decomp_result.subtasks:
+                # 需要分解，将子任务推入栈继续处理
+                for child in reversed(decomp_result.subtasks):
+                    stack.append(child)
+            else:
+                # 不需要分解，加入结果
+                result.append(task)
         
         return result

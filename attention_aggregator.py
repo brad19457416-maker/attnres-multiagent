@@ -2,8 +2,7 @@
 注意力聚合器 - 核心创新！基于注意力残差思想聚合多个子任务结果
 """
 
-from typing import List, Dict
-from dataclasses import dataclass
+from typing import List, Dict, Callable
 
 from .attn_types import SubTaskResult, BlockResult, BlockAggregatedResult
 
@@ -55,8 +54,8 @@ class AttentionAggregator:
     解决上下文爆炸和信息稀释问题。
     """
     
-    def __init__(self):
-        pass
+    def __init__(self, llm_client: Callable = None):
+        self._call_llm = llm_client if llm_client else None
     
     def aggregate(self, 
                  block_result: BlockResult,
@@ -98,9 +97,12 @@ class AttentionAggregator:
 注意：有 {failed_count} 个子任务执行失败，这些结果缺失，请在聚合结果中说明哪些部分信息缺失。
 """
         
-        # call_llm 由外部注入
-        global call_llm
-        response = call_llm(prompt, temperature=0.3)
+        # call_llm 使用实例变量或全局
+        if self._call_llm:
+            response = self._call_llm(prompt, temperature=0.3)
+        else:
+            global call_llm
+            response = call_llm(prompt, temperature=0.3)
         
         import json
         try:
@@ -131,7 +133,8 @@ class AttentionAggregator:
     
     def final_aggregate(self,
                        blocks: List[BlockAggregatedResult],
-                       query: str) -> str:
+                       query: str,
+                       llm_client: Callable = None) -> str:
         """最终聚合所有Block的结果
         
         每个Block已经聚合过了，这里再做一次最终整合。
@@ -154,8 +157,13 @@ class AttentionAggregator:
 请整合所有阶段的结果，生成一个最终的、完整连贯的回答。直接回答用户问题即可:
 """
         
-        # call_llm 由外部注入
-        global call_llm
-        final_answer = call_llm(prompt, temperature=0.5)
+        # call_llm 使用实例变量、参数传入或全局
+        if self._call_llm:
+            final_answer = self._call_llm(prompt, temperature=0.5)
+        elif llm_client:
+            final_answer = llm_client(prompt, temperature=0.5)
+        else:
+            global call_llm
+            final_answer = call_llm(prompt, temperature=0.5)
         
         return final_answer.strip()

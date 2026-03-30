@@ -10,8 +10,7 @@ Author: OpenClaw
 Date: 2026-03-28
 """
 
-from typing import List, Optional
-from dataclasses import dataclass, field
+from typing import List, Optional, Callable
 
 from .attn_types import (
     SubTask, 
@@ -45,7 +44,8 @@ class AttnResMultiAgent:
                  parallel_execution: bool = False,
                  attn_score_model: str = "same",
                  enable_recursive_decomposition: bool = False,
-                 max_recursion_depth: int = 3):
+                 max_recursion_depth: int = 3,
+                 llm_client: Callable = None):
         """
         Args:
             block_size: 每个Block最多容纳多少个子任务
@@ -55,6 +55,8 @@ class AttnResMultiAgent:
             attn_score_model: 用哪个模型计算注意力分数
             enable_recursive_decomposition: 是否启用递归分层分解
             max_recursion_depth: 最大递归深度（默认3层）
+            llm_client: LLM调用函数，签名: llm_client(prompt: str, temperature: float) -> str
+                         如果不提供，使用OpenClaw全局call_llm
         """
         self.block_size = block_size
         self.max_blocks = max_blocks
@@ -63,11 +65,13 @@ class AttnResMultiAgent:
         self.attn_score_model = attn_score_model
         self.enable_recursive_decomposition = enable_recursive_decomposition
         self.max_recursion_depth = max_recursion_depth
+        self._llm_client = llm_client
         
         # 初始化模块
-        self.decomposer = TaskDecomposer(max_recursion_depth=max_recursion_depth)
-        self.executor = SubAgentExecutor(max_parallel=4 if parallel_execution else 1)
-        self.aggregator = AttentionAggregator()
+        self.decomposer = TaskDecomposer(llm_client=llm_client, max_recursion_depth=max_recursion_depth)
+        self.executor = SubAgentExecutor(max_parallel=4 if parallel_execution else 1, 
+                                        max_retries=1, llm_client=llm_client)
+        self.aggregator = AttentionAggregator(llm_client=llm_client)
     
     def _flatten_recursive(self, query: str, tasks: List[SubTask]) -> List[SubTask]:
         """递归展开任务，直到不需要分解
