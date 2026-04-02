@@ -113,7 +113,11 @@ class TaskDecomposer:
             )]
     
     def group_into_blocks(self, subtasks: List[SubTask], block_size: int = 8) -> List[List[SubTask]]:
-        """将子任务分组为Block，每个Block最多block_size个子任务"""
+        """将子任务分组为Block，每个Block最多block_size个子任务
+        
+        v3 改进: 合并小 Block —— 如果剩余子任务少于 block_size/2，合并到上一个 Block
+        避免出现很多只有 1-3 个子任务的小 Block，减少 Block 总数，从而减少聚合调用
+        """
         
         # 首先处理依赖关系，排序
         # 简单实现：按依赖排序，可并行的优先分组
@@ -123,6 +127,7 @@ class TaskDecomposer:
         
         blocks = []
         current_block = []
+        min_size_for_new_block = block_size // 2  # 少于这个数就合并
         
         # 先处理ready任务，按block_size分组
         for task in ready_tasks:
@@ -131,15 +136,27 @@ class TaskDecomposer:
                 current_block = []
             current_block.append(task)
         
+        # 处理最后一个current_block —— v3改进：如果太小，合并到前一个
         if current_block:
-            blocks.append(current_block)
+            if blocks and len(current_block) < min_size_for_new_block:
+                # 太小，合并到前一个
+                blocks[-1].extend(current_block)
+            else:
+                # 足够大，新開Block
+                blocks.append(current_block)
         
-        # waiting任务简单分到后续块（简化处理）
+        # waiting任务处理
         for task in waiting_tasks:
-            if not blocks or len(blocks[-1]) >= block_size:
+            if not blocks:
+                # 第一个Block
+                blocks.append([task])
+            elif len(blocks[-1]) >= block_size:
+                # 前一个已满，新开
                 blocks.append([task])
             else:
+                # 前一个还有空间，合并进去
                 blocks[-1].append(task)
+                # 合并后如果超过block_size，会在下一次处理时分割，但这种情况很少
         
         return blocks
     

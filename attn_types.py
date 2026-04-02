@@ -133,16 +133,29 @@ class InputArea:
 
 @dataclass
 class ActiveArea:
-    """激活区 - 当前正在处理的任务"""
+    """激活区 - 当前正在处理的任务
+    
+    v3 改进: 容量限制 (7±2 法则) —— 人脑工作记忆容量约 7±2 个组块
+    超过容量时，低优先级的自动挂起到结果区，保持处理焦点
+    """
     current_block_id: Optional[int] = None
     current_level_id: Optional[int] = None
     current_tasks: List[Any] = field(default_factory=list)
+    max_capacity: int = 7  # 7±2 法则，默认 7
     
     def clear(self):
         """清空激活区，准备下一个Block"""
         self.current_block_id = None
         self.current_level_id = None
         self.current_tasks.clear()
+    
+    def is_over_capacity(self) -> bool:
+        """是否超过容量"""
+        return len(self.current_tasks) > self.max_capacity
+    
+    def get_excess(self) -> int:
+        """超过容量多少"""
+        return max(0, len(self.current_tasks) - self.max_capacity)
 
 
 @dataclass

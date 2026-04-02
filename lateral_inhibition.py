@@ -126,12 +126,19 @@ class AdaptiveLateralInhibition:
         raw_scores: np.ndarray,
         embeddings: np.ndarray,
         normalize: bool = True,
+        enable_winner_take_all: bool = True,
+        wta_top_k: int = 3,
     ) -> np.ndarray:
         """计算最终分数，完整流程
+        
+        v3 改进: 增加赢者通吃 (Winner-Take-All) 后处理
         
         Args:
             raw_scores: 原始分数 (n,)
             embeddings: 结果嵌入 (n x d)，用于计算相似度
+            normalize: 是否归一化输出
+            enable_winner_take_all: 是否启用赢者通吃，每个语义簇只保留Top-K
+            wta_top_k: 每个簇保留多少个结果
             
         Returns:
             final_scores: 抑制后的最终分数
@@ -144,11 +151,77 @@ class AdaptiveLateralInhibition:
         # 应用侧抑制
         final_scores = self.apply_inhibition(raw_scores, similarity_matrix)
         
+        # v3 改进: 赢者通吃后处理
+        if enable_winner_take_all and len(final_scores) > wta_top_k:
+            final_scores = self._apply_winner_take_all(
+                final_scores, 
+                similarity_matrix, 
+                top_k=wta_top_k
+            )
+        
         # 可选归一化
         if normalize and np.sum(final_scores) > 0:
             final_scores = final_scores / np.sum(final_scores)
         
         return final_scores
+    
+    def _apply_winner_take_all(
+        self,
+        scores: np.ndarray,
+        similarity_matrix: np.ndarray,
+        top_k: int = 3,
+    ) -> np.ndarray:
+        """赢者通吃后处理 —— 每个相似度簇只保留Top-K得分最高的结果
+        
+        高度相似的结果中，只有得分最高的保留，其他被抑制到0
+        这进一步增强稀疏性，去除冗余
+        
+        Args:
+            scores: 侧抑制后的分数
+            similarity_matrix: 相似度矩阵
+            top_k: 每个连通分量保留多少个结果
+            
+        Returns:
+            processed_scores: WTA处理后的分数
+        """
+        n = len(scores)
+        result = scores.copy()
+        
+        # 连通分量聚类：相似度 > 阈值 => 同一个簇
+        visited = np.zeros(n, dtype=bool)
+        
+        for i in range(n):
+            if visited[i]:
+                continue
+            
+            # BFS找连通分量
+            from collections import deque
+            queue = deque()
+            queue.append(i)
+            visited[i] = True
+            cluster = []
+            
+            while queue:
+                node = queue.popleft()
+                cluster.append(node)
+                
+                # 找邻居：相似度 > 阈值且未访问
+                for neighbor in range(n):
+                    if not visited[neighbor] and similarity_matrix[node, neighbor] > self.threshold:
+                        visited[neighbor] = True
+                        queue.append(neighbor)
+            
+            # 如果簇大小 > top_k，只保留Top-K得分最高的
+            if len(cluster) > top_k:
+                # 按分数排序
+                cluster_scores = [(scores[idx], idx) for idx in cluster]
+                cluster_scores.sort(reverse=True)
+                
+                # 抑制除了Top-K以外的所有
+                for _, idx in cluster_scores[top_k:]:
+                    result[idx] = 0.0
+        
+        return result
 
 
 # 方便使用的默认实例

@@ -24,19 +24,32 @@
 
 | 改进点 | 对应模块 | 状态 |
 |---------|---------|------|
-| **5.1 工作记忆分区** | `working_memory.py` + `attn_types.py` | ⏳ |
-| **5.2 侧抑制参数化改进** | `lateral_inhibition.py` | ⏳ |
-| **5.3 技能遗忘改进** | `skill_forgetting.py` | ⏳ |
-| **5.4 反向投射增益计算** | `reverse_activation.py` + `gated_residual_aggregator.py` | ⏳ |
-| **5.5 并发控制改进** | `concurrency_controller.py` + `subagent_executor.py` | ⏳ |
+| **5.1 工作记忆分区** | `attn_types.py` 新增分区 | ✅ 已完成 |
+| **5.2 侧抑制参数化改进** | `lateral_inhibition.py` | ✅ 已完成 |
+| **5.3 技能遗忘改进** | `skill_forgetting.py` | ✅ 已完成 |
+| **5.4 反向投射增益计算** | `reverse_activation.py` + `gated_residual_aggregator.py` | ✅ 已完成 |
+| **5.5 并发控制改进** | `concurrency_controller.py` + `subagent_executor.py` | ✅ 已完成 |
+
+## 🚀 v3 第一阶段优化（新增，2026-04-02）
+
+| 优化点 | 对应修改 | 预期收益 | 状态 |
+|--------|---------|---------|------|
+| 1. JSON 压缩门控输出 | `gated_residual_aggregator.py` 修改 prompt | 减少 30-50% 门控 Token | ✅ 已完成 |
+| 2. 累积增益早停 | `hierarchical_attn_res.py` 新增判断 | 达到阈值提前停止，节省 Token | ✅ 已完成 |
+| 3. 合并小 Block | `task_decomposer.py` 修改分组逻辑 | 减少 Block 数量，减少聚合调用 | ✅ 已完成 |
+| 4. 赢者通吃 WTA 后处理 | `lateral_inhibition.py` 新增算法 | 进一步稀疏化，去除高度相似冗余 | ✅ 已完成 |
+| 5. 激活区容量限制 | `attn_types.py` 遵循 7±2 法则 | 避免信息过载，保持处理焦点 | ✅ 已完成 |
+| 6. 默认开启向量预过滤 | `gated_residual_aggregator.py` 默认配置 | 先用向量过滤，减少 LLM 打分 | ✅ 已完成 |
 
 ## 📝 实现说明
 
 所有新功能都做成可选模块，可配置开关：
-- 默认启用 v2 所有改进
-- 用户可以关闭某些特性回退到 v1 行为
+- 默认启用 v2/v3 所有改进
+- 用户可以关闭某些特性回退到旧版本行为
 - 保持向后兼容
 
 ## 进度更新
 
-- **2026-04-01**: 创建任务清单，开始实现
+- **2026-04-01**: 创建任务清单，开始实现 v2
+- **2026-04-01**: v2 所有核心改进完成，推送到 GitHub
+- **2026-04-02**: v3 第一阶段优化完成（6项高优先级改进），准备测试验证

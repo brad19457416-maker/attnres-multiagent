@@ -61,26 +61,13 @@ GATED_AGGREGATE_PROMPT = """# 门控注意力残差聚合
 
 ## 你的任务
 
-### 第一步: 给每个子任务打分 (0-10分)
-- **分数越高** = 结果与查询**高度相关，质量好，重要**
-- **分数越低** = 结果**不相关、重复、质量差**
+1. **给每个子任务打分** (0-10分): 分数越高 = 结果与查询高度相关、质量好、重要
+2. **计算当前Block的整体门控值** (0.0-1.0): 门控值越高 = 信息增益越大，avg(分数) / 10.0
+3. **聚合结果**: 根据分数加权聚合，生成简洁、连贯、信息密度高的聚合结果，删除不重要内容
+4. **反向激活提示** (v2 改进): 列出需要重新激活下层的主题、理由、预估信息增益 (0-1)
 
-### 第二步: 计算当前Block的整体门控值 (0.0 - 1.0)
-- **门控值越高** = 这个Block包含较多重要新信息，应该保留更多
-- **门控值越低** = 这个Block信息增益很小，大部分是重复，可以压缩过滤
-- **计算方式**: 门控值 = avg(注意力分数) / 10.0
+**只输出JSON，不要任何其他解释性文字**:
 
-### 第三步: 聚合当前Block结果
-根据注意力分数加权聚合，生成一份**简洁、连贯、信息密度高**的聚合结果。
-不重要、不相关的内容要大胆删掉或者简写，只保留重要信息。
-
-### 第四步: 残差信息交互 (创新! v2 改进)
-请给出**反向激活提示** —— 基于当前Block的新信息，你认为前面哪些层次/Block的信息需要被**重新强调**？
-列出需要重新激活的主题、理由，以及预估的**信息增益量** (0-1):
-- **信息增益接近 1** = 当前Block发现了重要新线索，下层有大量相关信息被低估，重新激活会显著提升质量
-- **信息增益接近 0** = 只是微小调整，不需要重新激活
-
-请按照以下JSON格式输出:
 {
   "attention_scores": {
     "task-id-1": score_1,
@@ -88,7 +75,7 @@ GATED_AGGREGATE_PROMPT = """# 门控注意力残差聚合
     ...
   },
   "gate_value": 0.xx,
-  "aggregated_result": "这里是你聚合后的完整回答",
+  "aggregated_result": "这里是聚合后的完整回答",
   "reverse_activation_topics": [
     {
       "topic": "需要重新激活的主题",
@@ -97,8 +84,6 @@ GATED_AGGREGATE_PROMPT = """# 门控注意力残差聚合
     }
   ]
 }
-
-开始输出JSON：
 """
 
 
@@ -173,16 +158,25 @@ class GatedResidualAggregator:
         llm_client: Callable = None,
         gate_at_block_level: bool = False,  # v2: 默认关闭Block级别门控，只在层次计算
         reverse_activation_gain_threshold: float = 0.3,  # v2: 增益阈值
+        # v3 新增: 向量预过滤
+        enable_vector_prefilter: bool = True,  # v3: 默认开启，节省token
+        vector_similarity_threshold: float = 0.3,  # 低于此相似度过滤
     ):
         """
         Args:
             llm_client: LLM调用函数
             gate_at_block_level: 是否在Block级别计算门控，False 只在层次级别计算 → 节省token
             reverse_activation_gain_threshold: 反向激活增益阈值，低于此不触发
+            enable_vector_prefilter: v3 改进，是否开启向量预过滤，先用向量相似度过滤，
+                只对过滤后的候选计算LLM门控，节省token
+            vector_similarity_threshold: 相似度阈值，低于此过滤掉
         """
         self._call_llm = llm_client if llm_client else None
         self.gate_at_block_level = gate_at_block_level
         self.reverse_gain_threshold = reverse_activation_gain_threshold
+        # v3 向量预过滤配置
+        self.enable_vector_prefilter = enable_vector_prefilter
+        self.vector_similarity_threshold = vector_similarity_threshold
     
     def aggregate_block(self, 
                        block_result: BlockResult,

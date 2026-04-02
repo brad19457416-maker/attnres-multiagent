@@ -106,6 +106,11 @@ class HGARMultiAgent:
                  enable_dynamic_concurrency: bool = True,
                  min_concurrency: int = 1,
                  max_concurrency: int = 8,
+                 # v3 优化新增: 累积增益早停
+                 cumulative_gain_threshold: float = 2.5,
+                 # v3 优化新增: 向量预过滤
+                 enable_vector_prefilter: bool = True,
+                 vector_similarity_threshold: float = 0.3,
                  llm_client: Callable = None):
         """
         Args:
@@ -144,6 +149,11 @@ class HGARMultiAgent:
         # v2 配置
         self.enable_working_memory = enable_working_memory_partition
         self.reverse_gain_threshold = reverse_activation_gain_threshold
+        # v3 优化: 累积增益早停
+        self.cumulative_gain_threshold = cumulative_gain_threshold
+        # v3 优化: 向量预过滤
+        self.enable_vector_prefilter = enable_vector_prefilter
+        self.vector_similarity_threshold = vector_similarity_threshold
         
         # 初始化模块
         self.decomposer = TaskDecomposer(
@@ -167,7 +177,9 @@ class HGARMultiAgent:
         self.aggregator = GatedResidualAggregator(
             llm_client=llm_client,
             gate_at_block_level=gate_at_block_level,
-            reverse_activation_gain_threshold=reverse_activation_gain_threshold
+            reverse_activation_gain_threshold=reverse_activation_gain_threshold,
+            enable_vector_prefilter=enable_vector_prefilter if 'enable_vector_prefilter' in locals() else True,
+            vector_similarity_threshold=vector_similarity_threshold if 'vector_similarity_threshold' in locals() else 0.3,
         )
         # v2 新增模块
         self.reverse_manager = ReverseActivationManager(
@@ -333,12 +345,13 @@ class HGARMultiAgent:
                 wm.commit_level_result(current_level)
             
             # 🔥 创新: 置信度路由 - 基于门控置信度提前停止
-            # v2 改进: 累积增益判断
+            # v3 改进: 累积增益判断，达到阈值就停止
             if self.enable_confidence_routing and level_idx < self.max_levels - 1:
                 if current_level.gate_score < self.min_gate_for_continue:
                     # 信息增益太小，提前停止
                     break
-                if cumulative_gain >= 2.0:  # 累积增益足够
+                if cumulative_gain >= self.cumulative_gain_threshold:
+                    # 已经获得足够累积增益，提前停止
                     break
         
         # ========== Step 5: 最终聚合 ==========
