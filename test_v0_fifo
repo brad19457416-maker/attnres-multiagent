@@ -1,0 +1,7 @@
+#!/bin/bash
+# 创建命名管道来处理交互式输入
+rm -f /tmp/llm_pipe
+mkfifo /tmp/llm_pipe
+python test_v0_run.py < /tmp/llm_pipe > test_v0_running.log 2>&1 &
+PID=$!
+echo $PID > test_v0.pid

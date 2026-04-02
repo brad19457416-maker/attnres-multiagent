@@ -50,11 +50,15 @@ from attn_types import (
     BlockResult, 
     BlockAggregatedResult,
     HierarchicalLevel,
-    RunResult
+    RunResult,
+    WorkingMemory,
+    ReverseActivationRequest,
 )
 from task_decomposer import TaskDecomposer
 from subagent_executor import SubAgentExecutor
 from gated_residual_aggregator import GatedResidualAggregator
+from reverse_activation import ReverseActivationManager
+from concurrency_controller import DynamicConcurrencyController, RetryPolicy
 
 
 class HGARMultiAgent:
@@ -95,6 +99,13 @@ class HGARMultiAgent:
                  enable_reverse_activation: bool = True,
                  enable_confidence_routing: bool = True,
                  min_gate_for_continue: float = 0.15,
+                 # v2 新增参数
+                 enable_working_memory_partition: bool = True,
+                 gate_at_block_level: bool = False,
+                 reverse_activation_gain_threshold: float = 0.3,
+                 enable_dynamic_concurrency: bool = True,
+                 min_concurrency: int = 1,
+                 max_concurrency: int = 8,
                  llm_client: Callable = None):
         """
         Args:
@@ -104,10 +115,19 @@ class HGARMultiAgent:
             enable_recursive_decomposition: 是否启用递归分解
             max_recursion_depth: 最大递归深度
             parallel_execution: 是否启用并行执行
-            max_parallel: 最大并行数
+            max_parallel: 最大并行数（固定并发时）
             enable_reverse_activation: 是否启用双向注意力流反向激活
             enable_confidence_routing: 是否启用置信度路由（低置信度重跑）
             min_gate_for_continue: 最小门控值继续下一层，如果最后一层平均门控低于此值提前停止
+            
+            # v2 新增参数
+            enable_working_memory_partition: 是否启用工作记忆分区 (v2 改进)
+            gate_at_block_level: 是否在Block级别计算门控，False 只在层次级别计算 → 节省token
+            reverse_activation_gain_threshold: 反向激活增益阈值，低于此不触发
+            enable_dynamic_concurrency: 是否启用动态并发控制 (v2 改进)
+            min_concurrency: 动态并发最小并发数
+            max_concurrency: 动态并发最大并发数
+            
             llm_client: LLM调用函数，如果不提供使用全局call_llm
         """
         self.block_size = block_size
@@ -121,19 +141,44 @@ class HGARMultiAgent:
         self.enable_confidence_routing = enable_confidence_routing
         self.min_gate_for_continue = min_gate_for_continue
         
+        # v2 配置
+        self.enable_working_memory = enable_working_memory_partition
+        self.reverse_gain_threshold = reverse_activation_gain_threshold
+        
         # 初始化模块
         self.decomposer = TaskDecomposer(
             llm_client=llm_client, 
             max_recursion_depth=max_recursion_depth
         )
+        # v2: 动态并发控制
+        if enable_dynamic_concurrency:
+            max_retries = 3
+        else:
+            max_retries = 2 if enable_confidence_routing else 1
+            
         self.executor = SubAgentExecutor(
             max_parallel=max_parallel if parallel_execution else 1,
-            max_retries=2 if enable_confidence_routing else 1,
-            llm_client=llm_client
+            max_retries=max_retries,
+            llm_client=llm_client,
+            enable_dynamic_concurrency=enable_dynamic_concurrency,
+            min_concurrency=min_concurrency,
+            max_concurrency=max_concurrency,
         )
         self.aggregator = GatedResidualAggregator(
-            llm_client=llm_client
+            llm_client=llm_client,
+            gate_at_block_level=gate_at_block_level,
+            reverse_activation_gain_threshold=reverse_activation_gain_threshold
         )
+        # v2 新增模块
+        self.reverse_manager = ReverseActivationManager(
+            default_gain_threshold=reverse_activation_gain_threshold
+        )
+        if enable_dynamic_concurrency:
+            self.concurrency_controller = DynamicConcurrencyController(
+                min_concurrency=min_concurrency,
+                max_concurrency=max_concurrency,
+                priority_by_gate=True
+            )
     
     def _flatten_recursive(self, query: str, tasks: List[SubTask]) -> List[SubTask]:
         """递归展开任务"""
@@ -164,9 +209,21 @@ class HGARMultiAgent:
         return levels
     
     def run(self, query: str) -> RunResult:
-        """执行完整的层次化门控注意力残差多智能体流程"""
+        """执行完整的层次化门控注意力残差多智能体流程 (v2 更新)
         
-        # ========== Step 1: 任务分解 ==========
+        v2 改进:
+        - 集成工作记忆分区
+        - 支持反向激活增益过滤
+        - 支持动态并发控制
+        """
+        
+        # ========== Step 1: 初始化工作记忆 (v2 新增) ==========
+        if self.enable_working_memory:
+            wm = WorkingMemory.create(query)
+        else:
+            wm = None
+        
+        # ========== Step 2: 任务分解 ==========
         # 顶层分解 + 递归展开
         subtasks = self.decomposer.decompose(query)
         
@@ -175,15 +232,16 @@ class HGARMultiAgent:
         
         total_subtasks = len(subtasks)
         
-        # ========== Step 2: 分组 ==========
+        # ========== Step 3: 分组 ==========
         # 子任务 → Block → 层次
         blocks = self._group_into_blocks(subtasks)
         levels_blocked = self._group_blocks_into_levels(blocks)
         
-        # ========== Step 3: 逐层次处理 ==========
+        # ========== Step 4: 逐层次处理 ==========
         processed_levels: List[HierarchicalLevel] = []
         total_tokens = 0
         block_counter = 0
+        cumulative_gain = 0.0
         
         for level_idx, level_blocks in enumerate(levels_blocked):
             # 处理当前层次中的每个Block
@@ -194,20 +252,33 @@ class HGARMultiAgent:
                 block_id = block_counter
                 block_counter += 1
                 
-                # 判断是否并行
-                use_parallel = self.parallel_execution and len(block_subtasks) > 1
-                # 收集之前层次聚合文本
-                prev_aggregated = "\n\n".join([
-                    f"Level {lv.level_id}:\n{lv.aggregated}" 
-                    for lv in processed_levels
-                ])
+                # 获取上下文从工作记忆
+                if wm:
+                    prev_aggregated = wm.get_full_context()
+                else:
+                    prev_aggregated = "\n\n".join([
+                        f"Level {lv.level_id}:\n{lv.aggregated}" 
+                        for lv in processed_levels
+                    ])
+                
+                # 判断是否并行（v2: 动态并发）
+                if hasattr(self, 'concurrency_controller'):
+                    # 使用动态并发控制器
+                    self.concurrency_controller.reset_stats()
+                    # 这里简化，并发数由控制器动态计算
+                    current_concurrency = self.concurrency_controller.get_current_concurrency([])
+                    use_parallel = self.parallel_execution and len(block_subtasks) > 1
+                    actual_parallel = min(current_concurrency, len(block_subtasks)) if use_parallel else 1
+                else:
+                    use_parallel = self.parallel_execution and len(block_subtasks) > 1
+                    actual_parallel = self.max_parallel if use_parallel else 1
                 
                 block_result = self.executor.execute_block(
                     block_subtasks,
                     query,
                     previous_blocks_aggregated=prev_aggregated,
                     parallel=use_parallel,
-                    max_parallel=self.max_parallel
+                    max_parallel=actual_parallel
                 )
                 # 覆盖block_id
                 block_result.block_id = block_id
@@ -218,6 +289,14 @@ class HGARMultiAgent:
                     query,
                     processed_levels
                 )
+                
+                # v2: 如果启用工作记忆，添加反向激活请求
+                if wm and self.enable_reverse_activation:
+                    # 从聚合结果提取反向激活请求（这里需要从LLM输出获取）
+                    # 实际已经在aggregate_block中解析，现在添加到工作记忆
+                    # 注意：当前实现中，reverse_activation_topics 需要从data获取
+                    # 这里我们保持兼容，后续完整实现
+                    pass
                 
                 processed_blocks.append(aggregated_block)
                 total_tokens += aggregated_block.total_token_usage
@@ -230,25 +309,39 @@ class HGARMultiAgent:
                 previous_levels=processed_levels
             )
             
-            # 🔥 创新: 双向注意力流 - 反向激活下层
-            if self.enable_reverse_activation and len(processed_levels) > 0:
-                # 检查当前层次是否有需要反向激活的主题
-                # （这里我们简化：如果当前层次门控很低，可能需要下层补充）
-                # 实际反向激活已经在aggregate_block中收集了需求，这里我们让
-                # aggregator基于新发现重新激活下层信息
-                # （完整实现会更复杂，这里我们做增量式设计）
-                pass
+            # 更新累积增益
+            cumulative_gain += current_level.gate_score
             
-            # 添加到处理完的层次
+            # 🔥 v2 改进: 双向注意力流 - 反向激活下层，带增益过滤
+            if wm and self.enable_reverse_activation and len(processed_levels) > 0:
+                if self.reverse_manager.has_pending_requests(wm, self.reverse_gain_threshold):
+                    pending = self.reverse_manager.get_pending_requests(wm, self.reverse_gain_threshold)
+                    # 执行反向激活
+                    if len(pending) > 0:
+                        revived_result = self.aggregator.reverse_activate_lower(
+                            [t.__dict__ for t in pending],
+                            query,
+                            processed_levels
+                        )
+                        # 将反向激活结果合并到当前层次
+                        current_level.aggregated = current_level.aggregated + "\n\n**反向激活补充:**\n" + revived_result
+                    self.reverse_manager.clear_pending(wm)
+            
+            # 添加到处理完的层次和工作记忆
             processed_levels.append(current_level)
+            if wm:
+                wm.commit_level_result(current_level)
             
-            # 🔥 创新: 自适应提前停止 - 基于门控置信度
-            if level_idx < self.max_levels - 1:
+            # 🔥 创新: 置信度路由 - 基于门控置信度提前停止
+            # v2 改进: 累积增益判断
+            if self.enable_confidence_routing and level_idx < self.max_levels - 1:
                 if current_level.gate_score < self.min_gate_for_continue:
                     # 信息增益太小，提前停止
                     break
+                if cumulative_gain >= 2.0:  # 累积增益足够
+                    break
         
-        # ========== Step 4: 最终聚合 ==========
+        # ========== Step 5: 最终聚合 ==========
         # 整合所有层次的残差连接，按门控加权
         final_answer = self.aggregator.final_aggregate(
             processed_levels,
@@ -260,6 +353,21 @@ class HGARMultiAgent:
         for lv in processed_levels:
             all_blocks.extend(lv.blocks)
         
+        # 构建元数据（包含v2特性）
+        metadata = {
+            "architecture": "HGARN v2 - Hierarchical Gated Attention Residual Network",
+            "max_levels": self.max_levels,
+            "block_size": self.block_size,
+            "enable_reverse_activation": self.enable_reverse_activation,
+            "enable_confidence_routing": self.enable_confidence_routing,
+            "enable_recursive_decomposition": self.enable_recursive_decomposition,
+            "enable_working_memory_partition": self.enable_working_memory,
+            "reverse_activation_gain_threshold": self.reverse_gain_threshold,
+        }
+        
+        if hasattr(self, 'concurrency_controller'):
+            metadata["enable_dynamic_concurrency"] = True
+        
         return RunResult(
             query=query,
             final_answer=final_answer,
@@ -270,12 +378,5 @@ class HGARMultiAgent:
             hierarchical_levels=processed_levels,
             success=True,
             early_stopped=len(processed_levels) < len(levels_blocked),
-            metadata={
-                "architecture": "HGARN - Hierarchical Gated Attention Residual Network",
-                "max_levels": self.max_levels,
-                "block_size": self.block_size,
-                "enable_reverse_activation": self.enable_reverse_activation,
-                "enable_confidence_routing": self.enable_confidence_routing,
-                "enable_recursive_decomposition": self.enable_recursive_decomposition
-            }
+            metadata=metadata
         )

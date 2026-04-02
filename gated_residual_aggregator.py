@@ -22,8 +22,13 @@ from attn_types import (
     SubTaskResult, 
     BlockResult, 
     BlockAggregatedResult,
-    HierarchicalLevel
+    HierarchicalLevel,
+    ReverseActivationRequest,
+    WorkingMemory,
 )
+
+# v2 改进配置
+from typing import Tuple
 
 
 GATED_AGGREGATE_PROMPT = """# 门控注意力残差聚合
@@ -69,9 +74,11 @@ GATED_AGGREGATE_PROMPT = """# 门控注意力残差聚合
 根据注意力分数加权聚合，生成一份**简洁、连贯、信息密度高**的聚合结果。
 不重要、不相关的内容要大胆删掉或者简写，只保留重要信息。
 
-### 第四步: 残差信息交互 (创新!)
+### 第四步: 残差信息交互 (创新! v2 改进)
 请给出**反向激活提示** —— 基于当前Block的新信息，你认为前面哪些层次/Block的信息需要被**重新强调**？
-列出需要重新激活的主题和理由。
+列出需要重新激活的主题、理由，以及预估的**信息增益量** (0-1):
+- **信息增益接近 1** = 当前Block发现了重要新线索，下层有大量相关信息被低估，重新激活会显著提升质量
+- **信息增益接近 0** = 只是微小调整，不需要重新激活
 
 请按照以下JSON格式输出:
 {
@@ -85,7 +92,8 @@ GATED_AGGREGATE_PROMPT = """# 门控注意力残差聚合
   "reverse_activation_topics": [
     {
       "topic": "需要重新激活的主题",
-      "reason": "为什么需要重新激活"
+      "reason": "为什么需要重新激活",
+      "information_gain": 0.xx
     }
   ]
 }
@@ -146,17 +154,35 @@ REVIVE_ACTIVATION_PROMPT = """# 反向激活下层信息 (残差连接交互)
 
 
 class GatedResidualAggregator:
-    """🔥 门控残差聚合器 - 核心创新
+    """🔥 门控残差聚合器 - 核心创新 (v2 更新)
     
     实现层次化门控注意力残差聚合:
     1. 每个Block输出都带门控值，表示信息增益
     2. 每个Block都建立残差连接到最终输出
     3. 支持反向激活，上层结果可以唤醒下层关键信息
     4. 最终聚合按门控值加权整合所有残差
+    
+    v2 改进:
+    - 支持可选关闭Block级别门控计算，节省token
+    - 反向激活增加信息增益计算，只有高增益才触发
+    - 集成工作记忆分区
     """
     
-    def __init__(self, llm_client: Callable = None):
+    def __init__(
+        self,
+        llm_client: Callable = None,
+        gate_at_block_level: bool = False,  # v2: 默认关闭Block级别门控，只在层次计算
+        reverse_activation_gain_threshold: float = 0.3,  # v2: 增益阈值
+    ):
+        """
+        Args:
+            llm_client: LLM调用函数
+            gate_at_block_level: 是否在Block级别计算门控，False 只在层次级别计算 → 节省token
+            reverse_activation_gain_threshold: 反向激活增益阈值，低于此不触发
+        """
         self._call_llm = llm_client if llm_client else None
+        self.gate_at_block_level = gate_at_block_level
+        self.reverse_gain_threshold = reverse_activation_gain_threshold
     
     def aggregate_block(self, 
                        block_result: BlockResult,
@@ -215,7 +241,7 @@ class GatedResidualAggregator:
             attention_scores = data.get("attention_scores", {})
             gate_value = data.get("gate_value", 0.5)
             aggregated_result = data.get("aggregated_result", "")
-            # reverse_activation = data.get("reverse_activation_topics", [])
+            reverse_activation_topics = data.get("reverse_activation_topics", [])
         except Exception as e:
             # 解析失败，平均分
             attention_scores = {r.task_id: 5.0 for r in block_result.results}
@@ -224,6 +250,7 @@ class GatedResidualAggregator:
                 f"**{r.task_id}**:\n{r.result}" 
                 for r in block_result.results
             ])
+            reverse_activation_topics = []
         
         # 计算总token
         total_tokens = sum([r.token_usage for r in block_result.results])
