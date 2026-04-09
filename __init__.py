@@ -71,6 +71,12 @@ from vector_store_base import (
     ChromaDBVectorStore,
     default_in_memory,
 )
+from autonomous_memory import (
+    AutonomousMemoryManager,
+    AutonomyConfig,
+    create_default_manager,
+    default_manager,
+)
 from reverse_activation import ReverseActivationManager
 from llm_client_base import LLMClient, QianfanCodingPlanClient
 from vector_selector import compute_similarity, select_top_k, ScoredResult
@@ -116,6 +122,11 @@ __all__ = [
     'InMemoryVectorStore',
     'ChromaDBVectorStore',
     'default_in_memory',
+    # v4 新增：自主记忆管理
+    'AutonomousMemoryManager',
+    'AutonomyConfig',
+    'create_default_manager',
+    'default_manager',
     # 模块
     'GatedResidualAggregator',
     'AdaptiveLateralInhibition',

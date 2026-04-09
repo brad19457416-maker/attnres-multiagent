@@ -69,5 +69,5 @@
 | P1 | 分层唤醒：启动只加载 L0+L1 | `hierarchical_attn_res.py` 集成 SkillPalace | ✅ 已完成 |
 | P2 | AAAK 压缩技能摘要 | 新增 `aaak_compress.py` | ✅ 已完成 |
 | P2 | 模块化抽象：向量存储 | `vector_store_base.py` 抽象基类 + 内存/ChromaDB 实现 | ✅ 已完成 |
-| P3 | 完整实体关系图谱（时序）| `temporal_facts.py` - TemporalFactGraph 已实现 | ✅ 已完成基础版 |
-| P3 | 自主记忆管理 | 集成 | ⏳ 待开始 |
+| P3 | 完整实体关系图谱（时序）| `temporal_facts.py` - TemporalFactGraph 已实现 | ✅ 已完成 |
+| P3 | 自主记忆管理 | `autonomous_memory.py` - 自动添加/清理/合并建议 | ✅ 已完成 |
