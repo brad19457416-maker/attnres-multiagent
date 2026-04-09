@@ -1,0 +1,39 @@
+{
+  "wings": [
+    {
+      "wing_id": "development",
+      "name": "开发",
+      "description": "软件开发、架构设计、编程相关",
+      "created_at": 1775701139.412717,
+      "updated_at": 1775701139.412723,
+      "metadata": {}
+    },
+    {
+      "wing_id": "research",
+      "name": "研究",
+      "description": "AI 研究、论文调研、技术探索",
+      "created_at": 1775701139.412846,
+      "updated_at": 1775701139.412848,
+      "metadata": {}
+    },
+    {
+      "wing_id": "personal",
+      "name": "个人",
+      "description": "个人信息、偏好、决策",
+      "created_at": 1775701139.413068,
+      "updated_at": 1775701139.413069,
+      "metadata": {}
+    },
+    {
+      "wing_id": "projects",
+      "name": "项目",
+      "description": "各种具体项目",
+      "created_at": 1775701139.413402,
+      "updated_at": 1775701139.413404,
+      "metadata": {}
+    }
+  ],
+  "rooms": [],
+  "halls": [],
+  "closets": []
+}

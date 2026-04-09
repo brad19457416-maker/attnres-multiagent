@@ -44,6 +44,22 @@ from gated_residual_aggregator import GatedResidualAggregator
 from lateral_inhibition import AdaptiveLateralInhibition
 from concurrency_controller import DynamicConcurrencyController, RetryPolicy
 from skill_forgetting import AdaptiveSkillForgetting
+from skill_palace import (
+    SkillPalace,
+    Wing,
+    Room,
+    Hall,
+    Closet,
+    Drawer,
+    create_default_palace,
+    default_palace,
+)
+from temporal_facts import (
+    TemporalFactGraph,
+    TemporalFact,
+    Entity,
+    default_graph,
+)
 from reverse_activation import ReverseActivationManager
 from llm_client_base import LLMClient, QianfanCodingPlanClient
 from vector_selector import compute_similarity, select_top_k, ScoredResult
@@ -66,6 +82,20 @@ __all__ = [
     'ReverseActivationRequest',
     'Skill',
     'TaskWithPriority',
+    # v4 新增：宫殿式技能库
+    'SkillPalace',
+    'Wing',
+    'Room',
+    'Hall',
+    'Closet',
+    'Drawer',
+    'create_default_palace',
+    'default_palace',
+    # v4 新增：时序事实图谱
+    'TemporalFactGraph',
+    'TemporalFact',
+    'Entity',
+    'default_graph',
     # 模块
     'GatedResidualAggregator',
     'AdaptiveLateralInhibition',
@@ -82,6 +112,6 @@ __all__ = [
     'ScoredResult',
 ]
 
-__version__ = '2.0.0'
+__version__ = '3.0.0'
 
 

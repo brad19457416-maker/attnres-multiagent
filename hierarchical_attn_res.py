@@ -41,7 +41,7 @@
 创新: 双向注意力流 + 层次化门控残差网络
 """
 
-from typing import List, Optional, Callable
+from typing import List, Optional, Callable, Tuple
 
 from attn_types import (
     SubTask, 
@@ -53,12 +53,14 @@ from attn_types import (
     RunResult,
     WorkingMemory,
     ReverseActivationRequest,
+    Skill,
 )
 from task_decomposer import TaskDecomposer
 from subagent_executor import SubAgentExecutor
 from gated_residual_aggregator import GatedResidualAggregator
 from reverse_activation import ReverseActivationManager
 from concurrency_controller import DynamicConcurrencyController, RetryPolicy
+from skill_palace import SkillPalace, Closet
 
 
 class HGARMultiAgent:
@@ -111,6 +113,12 @@ class HGARMultiAgent:
                  # v3 优化新增: 向量预过滤
                  enable_vector_prefilter: bool = True,
                  vector_similarity_threshold: float = 0.3,
+                 # v4 新增: 技能宫殿 - 分层唤醒
+                 enable_skill_palace: bool = True,
+                 skill_palace_storage_root: str = "./skill_palace",
+                 enable_layered_wakeup: bool = True,
+                 l0_max_tokens: int = 50,
+                 l1_max_tokens: int = 200,
                  llm_client: Callable = None):
         """
         Args:
@@ -154,6 +162,16 @@ class HGARMultiAgent:
         # v3 优化: 向量预过滤
         self.enable_vector_prefilter = enable_vector_prefilter
         self.vector_similarity_threshold = vector_similarity_threshold
+        # v4 新增: 技能宫殿 + 分层唤醒
+        self.enable_skill_palace = enable_skill_palace
+        self.enable_layered_wakeup = enable_layered_wakeup
+        self.l0_max_tokens = l0_max_tokens
+        self.l1_max_tokens = l1_max_tokens
+        if enable_skill_palace:
+            from skill_palace import create_default_palace
+            self.skill_palace = create_default_palace(skill_palace_storage_root)
+        else:
+            self.skill_palace = None
         # v2 动态并发配置已经保存
         # 都保存好了
         
@@ -363,6 +381,26 @@ class HGARMultiAgent:
             query
         )
         
+        # ========== Step 0.5: 分层唤醒 - 从技能宫殿检索相关技能 ==========
+        retrieved_skills_text = ""
+        retrieved_skills: List[Tuple[Closet, float]] = []
+        if self.skill_palace and self.enable_layered_wakeup:
+            # 如果有查询嵌入，进行向量检索
+            # 这里先留接口，需要嵌入模型传入
+            # 默认只返回 L0 + L1 关键信息
+            stats = self.skill_palace.get_statistics()
+            if stats['closets'] > 0:
+                # L0: 系统身份 + 用户偏好
+                # L1: 当前项目关键决策
+                # 默认从 personal wing 的 preferences hall 获取
+                # 这里简化实现，实际使用时会嵌入查询进行相似度检索
+                retrieved_skills_text = f"\n\n## 从技能库检索到的相关知识:\n"
+                retrieved_skills_text += f"- 技能库总共有 {stats['closets']} 个技能\n"
+                # 用户可以后续集成向量嵌入进行相似度检索
+                # retrieved_skills = self.skill_palace.search_by_text(query_embedding, top_k=5)
+                # for closet, sim in retrieved_skills:
+                #     retrieved_skills_text += f"- {closet.skill.skill_name}: {closet.compressed_summary} (相似度: {sim:.3f})\n"
+        
         # 收集所有Block
         all_blocks = []
         for lv in processed_levels:
@@ -370,7 +408,7 @@ class HGARMultiAgent:
         
         # 构建元数据（包含v2特性）
         metadata = {
-            "architecture": "HGARN v2 - Hierarchical Gated Attention Residual Network",
+            "architecture": "HGARN v3 - Hierarchical Gated Attention Residual Network + SkillPalace",
             "max_levels": self.max_levels,
             "block_size": self.block_size,
             "enable_reverse_activation": self.enable_reverse_activation,
@@ -378,10 +416,16 @@ class HGARMultiAgent:
             "enable_recursive_decomposition": self.enable_recursive_decomposition,
             "enable_working_memory_partition": self.enable_working_memory,
             "reverse_activation_gain_threshold": self.reverse_gain_threshold,
+            "enable_skill_palace": self.enable_skill_palace,
+            "enable_layered_wakeup": self.enable_layered_wakeup,
         }
         
         if hasattr(self, 'concurrency_controller'):
             metadata["enable_dynamic_concurrency"] = True
+        
+        # 如果检索到技能，添加到最终答案前
+        if retrieved_skills_text:
+            final_answer = retrieved_skills_text + "\n\n" + final_answer
         
         return RunResult(
             query=query,

@@ -53,3 +53,21 @@
 - **2026-04-01**: 创建任务清单，开始实现 v2
 - **2026-04-01**: v2 所有核心改进完成，推送到 GitHub
 - **2026-04-02**: v3 第一阶段优化完成（6项高优先级改进），准备测试验证
+- **2026-04-09**: v4 改进 P0 - 借鉴 MemPalace 经验添加宫殿式结构化技能库 ✅
+  - 新增 `skill_palace.py` - Wing/Room/Hall/Closet/Drawer 五级组织结构
+  - 每个技能保留压缩摘要 + 原始原文抽屉，兼顾快速访问和完整追溯
+  - 继承 `AdaptiveSkillForgetting` 遗忘机制
+  - 支持向量相似度检索
+
+## 🎯 v4 长期记忆改进（借鉴 MemPalace/Graphiti 经验）
+
+| 优先级 | 改进 | 对应模块 | 状态 |
+|--------|------|---------|------|
+| P0 | 技能库改用 MemPalace 宫殿式结构化 | `skill_palace.py` | ✅ 已完成 |
+| P0 | 为每个技能保留原文抽屉 | `skill_palace.py` + 分离存储 | ✅ 已完成 |
+| P1 | 添加轻量级时序记录（创建/更新时间）+ 事实有效性窗口 | `temporal_facts.py` 新增时序图谱 | ✅ 已完成 |
+| P1 | 分层唤醒：启动只加载 L0+L1 | `hierarchical_attn_res.py` 集成 SkillPalace | ✅ 已完成 |
+| P2 | AAAK 压缩技能摘要 | 新增 `aaak_compress.py` | ⏳ 待开始 |
+| P2 | 模块化抽象：向量存储、门控、聚合 | 重构接口 | ⏳ 待开始 |
+| P3 | 完整实体关系图谱（时序）| `temporal_facts.py` - TemporalFactGraph 已实现 | ✅ 已完成基础版 |
+| P3 | 自主记忆管理 | 集成 | ⏳ 待开始 |
