@@ -154,6 +154,8 @@ class HGARMultiAgent:
         # v3 优化: 向量预过滤
         self.enable_vector_prefilter = enable_vector_prefilter
         self.vector_similarity_threshold = vector_similarity_threshold
+        # v2 动态并发配置已经保存
+        # 都保存好了
         
         # 初始化模块
         self.decomposer = TaskDecomposer(
