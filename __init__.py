@@ -60,6 +60,17 @@ from temporal_facts import (
     Entity,
     default_graph,
 )
+from aaak_compress import (
+    AAAKCompressor,
+    EntityIndex,
+    default_compressor,
+)
+from vector_store_base import (
+    VectorStore,
+    InMemoryVectorStore,
+    ChromaDBVectorStore,
+    default_in_memory,
+)
 from reverse_activation import ReverseActivationManager
 from llm_client_base import LLMClient, QianfanCodingPlanClient
 from vector_selector import compute_similarity, select_top_k, ScoredResult
@@ -96,6 +107,15 @@ __all__ = [
     'TemporalFact',
     'Entity',
     'default_graph',
+    # v4 新增：AAAK 压缩
+    'AAAKCompressor',
+    'EntityIndex',
+    'default_compressor',
+    # v4 新增：向量存储抽象
+    'VectorStore',
+    'InMemoryVectorStore',
+    'ChromaDBVectorStore',
+    'default_in_memory',
     # 模块
     'GatedResidualAggregator',
     'AdaptiveLateralInhibition',

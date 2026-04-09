@@ -67,7 +67,7 @@
 | P0 | 为每个技能保留原文抽屉 | `skill_palace.py` + 分离存储 | ✅ 已完成 |
 | P1 | 添加轻量级时序记录（创建/更新时间）+ 事实有效性窗口 | `temporal_facts.py` 新增时序图谱 | ✅ 已完成 |
 | P1 | 分层唤醒：启动只加载 L0+L1 | `hierarchical_attn_res.py` 集成 SkillPalace | ✅ 已完成 |
-| P2 | AAAK 压缩技能摘要 | 新增 `aaak_compress.py` | ⏳ 待开始 |
-| P2 | 模块化抽象：向量存储、门控、聚合 | 重构接口 | ⏳ 待开始 |
+| P2 | AAAK 压缩技能摘要 | 新增 `aaak_compress.py` | ✅ 已完成 |
+| P2 | 模块化抽象：向量存储 | `vector_store_base.py` 抽象基类 + 内存/ChromaDB 实现 | ✅ 已完成 |
 | P3 | 完整实体关系图谱（时序）| `temporal_facts.py` - TemporalFactGraph 已实现 | ✅ 已完成基础版 |
 | P3 | 自主记忆管理 | 集成 | ⏳ 待开始 |
