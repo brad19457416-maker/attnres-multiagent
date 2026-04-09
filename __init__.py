@@ -71,6 +71,18 @@ from vector_store_base import (
     ChromaDBVectorStore,
     default_in_memory,
 )
+from aaak_compress import (
+    AAAKCompressor,
+    EntityIndex,
+    default_compressor,
+)
+from plugin_system import (
+    PluginManager,
+    Plugin,
+    PluginSchema,
+    PluginParameter,
+    default_manager as default_plugin_manager,
+)
 from autonomous_memory import (
     AutonomousMemoryManager,
     AutonomyConfig,
@@ -122,6 +134,16 @@ __all__ = [
     'InMemoryVectorStore',
     'ChromaDBVectorStore',
     'default_in_memory',
+    # v4 新增：AAAK 压缩
+    'AAAKCompressor',
+    'EntityIndex',
+    'default_compressor',
+    # v4 新增：插件系统
+    'PluginManager',
+    'Plugin',
+    'PluginSchema',
+    'PluginParameter',
+    'default_plugin_manager',
     # v4 新增：自主记忆管理
     'AutonomousMemoryManager',
     'AutonomyConfig',
